@@ -831,7 +831,7 @@ class History:
                 action['provider'] = sql_result['provider']
                 action['resource'] = sql_result['resource']
                 history['actions'].append(action)
-                history['actions'].sort(key=lambda x: x['time'])
+                history['actions'].sort(key=lambda x: x['time'], reverse=True)
 
         t = PageTemplate(file="history.tmpl")
         t.historyResults = sqlResults
@@ -861,7 +861,6 @@ class History:
         myDB.action("DELETE FROM history WHERE date < "+str((datetime.datetime.today()-datetime.timedelta(days=30)).strftime(history.dateFormat)))
         ui.notifications.message('Removed history entries greater than 30 days old')
         redirect("/history")
-
 
 ConfigMenu = [
     { 'title': 'General',           'path': 'config/general/'          },
@@ -941,10 +940,10 @@ class ConfigGeneral:
         return m.hexdigest()
 
     @cherrypy.expose
-    def saveGeneral(self, log_dir=None, web_port=None, web_log=None, web_ipv6=None,
+    def saveGeneral(self, log_dir=None, web_port=None, web_log=None, encryption_version=None, web_ipv6=None,
                     update_shows_on_start=None, launch_browser=None, web_username=None, use_api=None, api_key=None,
                     web_password=None, version_notify=None, enable_https=None, https_cert=None, https_key=None, sort_article=None,
-                    anon_redirect=None, git_path=None):
+                    anon_redirect=None, git_path=None, calendar_unprotected=None):
 
         results = []
 
@@ -957,6 +956,12 @@ class ConfigGeneral:
             web_log = 1
         else:
             web_log = 0
+            
+        if encryption_version == "on":
+            # Update to the last encryption_version available:
+            encryption_version = 1
+        else:
+            encryption_version = 0
 
         if update_shows_on_start == "on":
             update_shows_on_start = 1
@@ -977,17 +982,24 @@ class ConfigGeneral:
             version_notify = 1
         else:
             version_notify = 0
+            
+        if calendar_unprotected == "on":
+            calendar_unprotected = 1
+        else:
+            calendar_unprotected = 0
 
         sickbeard.UPDATE_SHOWS_ON_START = update_shows_on_start
         sickbeard.LAUNCH_BROWSER = launch_browser
         sickbeard.SORT_ARTICLE = sort_article
         sickbeard.ANON_REDIRECT = anon_redirect
-        sickbeard.GIT_PATH = git_path         
+        sickbeard.GIT_PATH = git_path
+        sickbeard.CALENDAR_UNPROTECTED = calendar_unprotected
         # sickbeard.LOG_DIR is set in config.change_LOG_DIR()
 
         sickbeard.WEB_PORT = int(web_port)
         sickbeard.WEB_IPV6 = web_ipv6
         # sickbeard.WEB_LOG is set in config.change_LOG_DIR()
+        sickbeard.ENCRYPTION_VERSION = encryption_version
         sickbeard.WEB_USERNAME = web_username
         sickbeard.WEB_PASSWORD = web_password
 
@@ -1133,7 +1145,9 @@ class ConfigSearch:
             torrent_high_bandwidth = 0
         sickbeard.TORRENT_HIGH_BANDWIDTH = torrent_high_bandwidth
 
-        if torrent_host and not re.match('https?://.*', torrent_host):
+        if torrent_host \
+        and not re.match('https?://.*', torrent_host) \
+        and not re.match ('scgi://.*', torrent_host):
             torrent_host = 'http://' + torrent_host
 
         if not torrent_host.endswith('/'):
@@ -2167,8 +2181,11 @@ class ConfigSubtitles:
         return _munge(t)
 
     @cherrypy.expose
-    def saveSubtitles(self, use_subtitles=None, subtitles_plugins=None, subtitles_languages=None, subtitles_dir=None, service_order=None, subtitles_history=None):
+    def saveSubtitles(self, use_subtitles=None, subtitles_plugins=None, subtitles_languages=None, subtitles_dir=None, service_order=None, subtitles_history=None, subtitles_finder_frequency=None):
         results = []
+
+        if subtitles_finder_frequency == '' or subtitles_finder_frequency is None:
+            subtitles_finder_frequency = 1
 
         if use_subtitles == "on":
             use_subtitles = 1
@@ -2194,6 +2211,7 @@ class ConfigSubtitles:
         sickbeard.SUBTITLES_LANGUAGES = [lang.alpha2 for lang in subtitles.isValidLanguage(subtitles_languages.replace(' ', '').split(','))] if subtitles_languages != ''  else ''
         sickbeard.SUBTITLES_DIR = subtitles_dir
         sickbeard.SUBTITLES_HISTORY = subtitles_history
+        sickbeard.SUBTITLES_FINDER_FREQUENCY = int(subtitles_finder_frequency)
 
         # Subtitles services
         services_str_list = service_order.split()
@@ -3818,6 +3836,16 @@ class WebInterface:
         redirect("/home")
 
     @cherrypy.expose
+    def setHistoryLayout(self, layout):
+
+        if layout not in ('compact', 'detailed'):
+            layout = 'detailed'
+
+        sickbeard.HISTORY_LAYOUT = layout
+
+        redirect("/history")
+
+    @cherrypy.expose
     def toggleDisplayShowSpecials(self, show):
 
         sickbeard.DISPLAY_SHOW_SPECIALS = not sickbeard.DISPLAY_SHOW_SPECIALS
@@ -3975,9 +4003,11 @@ class WebInterface:
         time_re = re.compile('([0-9]{1,2})\:([0-9]{2})(\ |)([AM|am|PM|pm]{2})')
 
     # Create a iCal string
-        ical = 'BEGIN:VCALENDAR\n'
-        ical += 'VERSION:2.0\n'
-        ical += 'PRODID://Sick-Beard Upcoming Episodes//\n'
+        ical = 'BEGIN:VCALENDAR\r\n'
+        ical += 'VERSION:2.0\r\n'
+        ical += 'X-WR-CALNAME:Sick Beard\r\n'
+        ical += 'X-WR-CALDESC:Sick Beard\r\n'
+        ical += 'PRODID://Sick-Beard Upcoming Episodes//\r\n'
 
         # Get shows info
         myDB = db.DBConnection()
@@ -4024,19 +4054,19 @@ class WebInterface:
                 air_date_time = datetime.datetime.combine(air_date, t).astimezone(local_zone)
 
         # Create event for episode
-                ical = ical + 'BEGIN:VEVENT\n'
-                ical = ical + 'DTSTART:' + str(air_date_time.date()).replace("-", "") + '\n'
-                ical = ical + 'SUMMARY:' + show['show_name'] + ': ' + episode['name'] + '\n'
-                ical = ical + 'UID:' + str(datetime.date.today().isoformat()) + '-' + str(random.randint(10000,99999)) + '@Sick-Beard\n'
+                ical = ical + 'BEGIN:VEVENT\r\n'
+                ical = ical + 'DTSTART;VALUE=DATE:' + str(air_date_time.date()).replace("-", "") + '\r\n'
+                ical = ical + 'SUMMARY:' + show['show_name'] + ': ' + episode['name'] + '\r\n'
+                ical = ical + 'UID:Sick-Beard-' + str(datetime.date.today().isoformat()) + '-' + show['show_name'].replace(" ", "-") + '-E' + str(episode['episode']) + 'S' + str(episode['season']) + '\r\n'
                 if (episode['description'] != ''):
-                    ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\\n\\n' + episode['description'] + '\n'
+                    ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\\n\\n' + episode['description'].splitlines()[0] + '\r\n'
                 else:
-                    ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\n'
-                ical = ical + 'LOCATION:' + 'Episode ' + str(episode['episode']) + ' - Season ' + str(episode['season']) + '\n'
-                ical = ical + 'END:VEVENT\n'
+                    ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\r\n'
+                ical = ical + 'LOCATION:' + 'Episode ' + str(episode['episode']) + ' - Season ' + str(episode['season']) + '\r\n'
+                ical = ical + 'END:VEVENT\r\n'
 
         # Ending the iCal
-        ical += 'END:VCALENDAR\n'
+        ical += 'END:VCALENDAR'
 
         return ical
 

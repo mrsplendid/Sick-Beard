@@ -1845,3 +1845,21 @@ pre {
      -moz-border-radius: 4px;
           border-radius: 4px;
 }
+
+.vertical {
+    display: inline-block;
+
+    background-color: #79DF46;
+    border-radius: 0 4px 4px 0;
+    border-width: 3px 3px 3px 0;
+    border-style: solid;
+    border-color: #B7B7B7;    
+    position: absolute;
+    font-weight: bold;
+    font-size: 0.99em;
+    line-height: 12.5px;
+    width: 24px;
+    color: #343434;
+    height: 37px;
+    text-align: center;
+}

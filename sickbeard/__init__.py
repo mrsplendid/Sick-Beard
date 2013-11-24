@@ -52,8 +52,11 @@ PID = None
 CFG = None
 CONFIG_FILE = None
 
-# this is the version of the config we EXPECT to find
+# This is the version of the config we EXPECT to find
 CONFIG_VERSION = 3
+
+# Default encryption version (0 for None)
+ENCRYPTION_VERSION = 0
 
 PROG_DIR = '.'
 MY_FULLNAME = None
@@ -384,6 +387,7 @@ EMAIL_LIST = None
 
 GUI_NAME = None
 HOME_LAYOUT = None
+HISTORY_LAYOUT = None
 DISPLAY_SHOW_SPECIALS = None
 COMING_EPS_LAYOUT = None
 COMING_EPS_DISPLAY_PAUSED = None
@@ -396,16 +400,18 @@ SUBTITLES_DIR = ''
 SUBTITLES_SERVICES_LIST = []
 SUBTITLES_SERVICES_ENABLED = []
 SUBTITLES_HISTORY = False
+SUBTITLES_FINDER_FREQUENCY = 1
 
 USE_FAILED_DOWNLOADS = False
 DELETE_FAILED = False
-TREAT_EMPTY_AS_FAILED = False
 
 EXTRA_SCRIPTS = []
 
 GIT_PATH = None
 
 IGNORE_WORDS = "german,french,core2hd,dutch,swedish,reenc,MrLss"
+
+CALENDAR_UNPROTECTED = False
 
 __INITIALIZED__ = False
 
@@ -417,7 +423,7 @@ def initialize(consoleLogging=True):
 
     with INIT_LOCK:
 
-        global ACTUAL_LOG_DIR, LOG_DIR, WEB_PORT, WEB_LOG, WEB_ROOT, WEB_USERNAME, WEB_PASSWORD, WEB_HOST, WEB_IPV6, USE_API, API_KEY, ENABLE_HTTPS, HTTPS_CERT, HTTPS_KEY, \
+        global ACTUAL_LOG_DIR, LOG_DIR, WEB_PORT, WEB_LOG, ENCRYPTION_VERSION, WEB_ROOT, WEB_USERNAME, WEB_PASSWORD, WEB_HOST, WEB_IPV6, USE_API, API_KEY, ENABLE_HTTPS, HTTPS_CERT, HTTPS_KEY, \
                 USE_NZBS, USE_TORRENTS, NZB_METHOD, NZB_DIR, DOWNLOAD_PROPERS, ALLOW_HIGH_PRIORITY, TORRENT_METHOD, \
                 SAB_USERNAME, SAB_PASSWORD, SAB_APIKEY, SAB_CATEGORY, SAB_HOST, \
                 NZBGET_USERNAME, NZBGET_PASSWORD, NZBGET_CATEGORY, NZBGET_HOST, currentSearchScheduler, backlogSearchScheduler, \
@@ -452,9 +458,9 @@ def initialize(consoleLogging=True):
                 USE_EMAIL, EMAIL_HOST, EMAIL_PORT, EMAIL_TLS, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM, EMAIL_NOTIFY_ONSNATCH, EMAIL_NOTIFY_ONDOWNLOAD, EMAIL_NOTIFY_ONSUBTITLEDOWNLOAD, EMAIL_LIST, \
                 USE_BANNER, USE_LISTVIEW, METADATA_XBMC, METADATA_XBMC_V12, METADATA_MEDIABROWSER, METADATA_PS3, METADATA_SYNOLOGY, METADATA_MEDE8ER, metadata_provider_dict, \
                 NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, \
-                GUI_NAME, HOME_LAYOUT, DISPLAY_SHOW_SPECIALS, COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, COMING_EPS_MISSED_RANGE, METADATA_WDTV, METADATA_TIVO, IGNORE_WORDS, CREATE_MISSING_SHOW_DIRS, \
-                ADD_SHOWS_WO_DIR, USE_SUBTITLES, SUBTITLES_LANGUAGES, SUBTITLES_DIR, SUBTITLES_SERVICES_LIST, SUBTITLES_SERVICES_ENABLED, SUBTITLES_HISTORY, subtitlesFinderScheduler, \
-                USE_FAILED_DOWNLOADS, DELETE_FAILED, TREAT_EMPTY_AS_FAILED, ANON_REDIRECT, LOCALHOST_IP
+                GUI_NAME, HOME_LAYOUT, HISTORY_LAYOUT, DISPLAY_SHOW_SPECIALS, COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, COMING_EPS_MISSED_RANGE, METADATA_WDTV, METADATA_TIVO, IGNORE_WORDS,  CALENDAR_UNPROTECTED, CREATE_MISSING_SHOW_DIRS, \
+                ADD_SHOWS_WO_DIR, USE_SUBTITLES, SUBTITLES_LANGUAGES, SUBTITLES_DIR, SUBTITLES_SERVICES_LIST, SUBTITLES_SERVICES_ENABLED, SUBTITLES_HISTORY, SUBTITLES_FINDER_FREQUENCY, subtitlesFinderScheduler, \
+                USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP
 
         if __INITIALIZED__:
             return False
@@ -500,6 +506,7 @@ def initialize(consoleLogging=True):
         WEB_IPV6 = bool(check_setting_int(CFG, 'General', 'web_ipv6', 0))
         WEB_ROOT = check_setting_str(CFG, 'General', 'web_root', '').rstrip("/")
         WEB_LOG = bool(check_setting_int(CFG, 'General', 'web_log', 0))
+        ENCRYPTION_VERSION = check_setting_int(CFG, 'General', 'encryption_version', 0)
         WEB_USERNAME = check_setting_str(CFG, 'General', 'web_username', '')
         WEB_PASSWORD = check_setting_str(CFG, 'General', 'web_password', '')
         LAUNCH_BROWSER = bool(check_setting_int(CFG, 'General', 'launch_browser', 1))
@@ -581,7 +588,7 @@ def initialize(consoleLogging=True):
             NZB_METHOD = 'blackhole'
 
         TORRENT_METHOD = check_setting_str(CFG, 'General', 'torrent_method', 'blackhole')
-        if TORRENT_METHOD not in ('blackhole', 'utorrent', 'transmission', 'deluge', 'download_station'):
+        if TORRENT_METHOD not in ('blackhole', 'utorrent', 'transmission', 'deluge', 'download_station', 'rtorrent'):
             TORRENT_METHOD = 'blackhole'
 
         DOWNLOAD_PROPERS = bool(check_setting_int(CFG, 'General', 'download_propers', 1))
@@ -825,14 +832,16 @@ def initialize(consoleLogging=True):
         SUBTITLES_SERVICES_ENABLED = [int(x) for x in check_setting_str(CFG, 'Subtitles', 'SUBTITLES_SERVICES_ENABLED', '').split('|') if x]
         SUBTITLES_DEFAULT = bool(check_setting_int(CFG, 'Subtitles', 'subtitles_default', 0))
         SUBTITLES_HISTORY = bool(check_setting_int(CFG, 'Subtitles', 'subtitles_history', 0))
+        SUBTITLES_FINDER_FREQUENCY = check_setting_int(CFG, 'Subtitles', 'subtitles_finder_frequency', 1)
 
         USE_FAILED_DOWNLOADS = bool(check_setting_int(CFG, 'FailedDownloads', 'use_failed_downloads', 0))
         DELETE_FAILED = bool(check_setting_int(CFG, 'FailedDownloads', 'delete_failed', 0))
-        TREAT_EMPTY_AS_FAILED = bool(check_setting_int(CFG, 'FailedDownloads', 'treat_empty_as_failed', 0))
 
         GIT_PATH = check_setting_str(CFG, 'General', 'git_path', '')
 
         IGNORE_WORDS = check_setting_str(CFG, 'General', 'ignore_words', IGNORE_WORDS)
+        
+        CALENDAR_UNPROTECTED = bool(check_setting_int(CFG, 'General', 'calendar_unprotected', 0))
 
         EXTRA_SCRIPTS = [x for x in check_setting_str(CFG, 'General', 'extra_scripts', '').split('|') if x]
 
@@ -906,6 +915,7 @@ def initialize(consoleLogging=True):
         GUI_NAME = check_setting_str(CFG, 'GUI', 'gui_name', 'slick')
 
         HOME_LAYOUT = check_setting_str(CFG, 'GUI', 'home_layout', 'poster')
+        HISTORY_LAYOUT = check_setting_str(CFG, 'GUI', 'history_layout', 'detailed')
         DISPLAY_SHOW_SPECIALS = bool(check_setting_int(CFG, 'GUI', 'display_show_specials', 1))
         COMING_EPS_LAYOUT = check_setting_str(CFG, 'GUI', 'coming_eps_layout', 'banner')
         COMING_EPS_DISPLAY_PAUSED = bool(check_setting_int(CFG, 'GUI', 'coming_eps_display_paused', 0))
@@ -997,7 +1007,7 @@ def initialize(consoleLogging=True):
 
 
         subtitlesFinderScheduler = scheduler.Scheduler(subtitles.SubtitlesFinder(),
-                                                     cycleTime=datetime.timedelta(hours=1),
+                                                     cycleTime=datetime.timedelta(hours=SUBTITLES_FINDER_FREQUENCY),
                                                      threadName="FINDSUBTITLES",
                                                      runImmediately=True)
 
@@ -1236,9 +1246,11 @@ def save_config():
 
     new_config = ConfigObj()
     new_config.filename = CONFIG_FILE
-
+    
+    # For passwords you must include the word `password` in the item_name and add `helpers.encrypt(ITEM_NAME, ENCRYPTION_VERSION)` in save_config()
     new_config['General'] = {}
     new_config['General']['config_version'] = CONFIG_VERSION
+    new_config['General']['encryption_version'] = int(ENCRYPTION_VERSION)
     new_config['General']['log_dir'] = ACTUAL_LOG_DIR if ACTUAL_LOG_DIR else 'Logs'
     new_config['General']['socket_timeout'] = SOCKET_TIMEOUT
     new_config['General']['web_port'] = WEB_PORT
@@ -1247,7 +1259,7 @@ def save_config():
     new_config['General']['web_log'] = int(WEB_LOG)
     new_config['General']['web_root'] = WEB_ROOT
     new_config['General']['web_username'] = WEB_USERNAME
-    new_config['General']['web_password'] = WEB_PASSWORD
+    new_config['General']['web_password'] = helpers.encrypt(WEB_PASSWORD, ENCRYPTION_VERSION)
     new_config['General']['localhost_ip'] = LOCALHOST_IP
     new_config['General']['anon_redirect'] = ANON_REDIRECT
     new_config['General']['use_api'] = int(USE_API)
@@ -1303,6 +1315,7 @@ def save_config():
     new_config['General']['extra_scripts'] = '|'.join(EXTRA_SCRIPTS)
     new_config['General']['git_path'] = GIT_PATH
     new_config['General']['ignore_words'] = IGNORE_WORDS
+    new_config['General']['calendar_unprotected'] = int(CALENDAR_UNPROTECTED)
 
     new_config['Blackhole'] = {}
     new_config['Blackhole']['nzb_dir'] = NZB_DIR
@@ -1333,13 +1346,13 @@ def save_config():
     new_config['TORRENTLEECH'] = {}
     new_config['TORRENTLEECH']['torrentleech'] = int(TORRENTLEECH)
     new_config['TORRENTLEECH']['torrentleech_username'] = TORRENTLEECH_USERNAME
-    new_config['TORRENTLEECH']['torrentleech_password'] = TORRENTLEECH_PASSWORD
+    new_config['TORRENTLEECH']['torrentleech_password'] = helpers.encrypt(TORRENTLEECH_PASSWORD, ENCRYPTION_VERSION)
     new_config['TORRENTLEECH']['torrentleech_options'] = TORRENTLEECH_OPTIONS
 
     new_config['IPTORRENTS'] = {}
     new_config['IPTORRENTS']['iptorrents'] = int(IPTORRENTS)
     new_config['IPTORRENTS']['iptorrents_username'] = IPTORRENTS_USERNAME
-    new_config['IPTORRENTS']['iptorrents_password'] = IPTORRENTS_PASSWORD
+    new_config['IPTORRENTS']['iptorrents_password'] = helpers.encrypt(IPTORRENTS_PASSWORD, ENCRYPTION_VERSION)
     new_config['IPTORRENTS']['iptorrents_freeleech'] = int(IPTORRENTS_FREELEECH)
     new_config['IPTORRENTS']['iptorrents_options'] = IPTORRENTS_OPTIONS
 
@@ -1355,13 +1368,13 @@ def save_config():
     new_config['SCC'] = {}
     new_config['SCC']['scc'] = int(SCC)
     new_config['SCC']['scc_username'] = SCC_USERNAME
-    new_config['SCC']['scc_password'] = SCC_PASSWORD
+    new_config['SCC']['scc_password'] = helpers.encrypt(SCC_PASSWORD, ENCRYPTION_VERSION)
     new_config['SCC']['scc_options'] = SCC_OPTIONS
 
     new_config['TORRENTDAY'] = {}
     new_config['TORRENTDAY']['torrentday'] = int(TORRENTDAY)
     new_config['TORRENTDAY']['torrentday_username'] = TORRENTDAY_USERNAME
-    new_config['TORRENTDAY']['torrentday_password'] = TORRENTDAY_PASSWORD
+    new_config['TORRENTDAY']['torrentday_password'] = helpers.encrypt(TORRENTDAY_PASSWORD, ENCRYPTION_VERSION)
     new_config['TORRENTDAY']['torrentday_freeleech'] = int(TORRENTDAY_FREELEECH)
     new_config['TORRENTDAY']['torrentday_options'] = TORRENTDAY_OPTIONS
 
@@ -1379,7 +1392,7 @@ def save_config():
     new_config['Newzbin'] = {}
     new_config['Newzbin']['newzbin'] = int(NEWZBIN)
     new_config['Newzbin']['newzbin_username'] = NEWZBIN_USERNAME
-    new_config['Newzbin']['newzbin_password'] = NEWZBIN_PASSWORD
+    new_config['Newzbin']['newzbin_password'] = helpers.encrypt(NEWZBIN_PASSWORD, ENCRYPTION_VERSION)
 
     new_config['Womble'] = {}
     new_config['Womble']['womble'] = int(WOMBLE)
@@ -1391,7 +1404,7 @@ def save_config():
 
     new_config['SABnzbd'] = {}
     new_config['SABnzbd']['sab_username'] = SAB_USERNAME
-    new_config['SABnzbd']['sab_password'] = SAB_PASSWORD
+    new_config['SABnzbd']['sab_password'] = helpers.encrypt(SAB_PASSWORD, ENCRYPTION_VERSION)
     new_config['SABnzbd']['sab_apikey'] = SAB_APIKEY
     new_config['SABnzbd']['sab_category'] = SAB_CATEGORY
     new_config['SABnzbd']['sab_host'] = SAB_HOST
@@ -1399,13 +1412,13 @@ def save_config():
     new_config['NZBget'] = {}
 
     new_config['NZBget']['nzbget_username'] = NZBGET_USERNAME    
-    new_config['NZBget']['nzbget_password'] = NZBGET_PASSWORD
+    new_config['NZBget']['nzbget_password'] = helpers.encrypt(NZBGET_PASSWORD, ENCRYPTION_VERSION)
     new_config['NZBget']['nzbget_category'] = NZBGET_CATEGORY
     new_config['NZBget']['nzbget_host'] = NZBGET_HOST
 
     new_config['TORRENT'] = {}
     new_config['TORRENT']['torrent_username'] = TORRENT_USERNAME
-    new_config['TORRENT']['torrent_password'] = TORRENT_PASSWORD
+    new_config['TORRENT']['torrent_password'] = helpers.encrypt(TORRENT_PASSWORD, ENCRYPTION_VERSION)
     new_config['TORRENT']['torrent_host'] = TORRENT_HOST
     new_config['TORRENT']['torrent_path'] = TORRENT_PATH
     new_config['TORRENT']['torrent_ratio'] = TORRENT_RATIO
@@ -1423,7 +1436,7 @@ def save_config():
     new_config['XBMC']['xbmc_update_onlyfirst'] = int(XBMC_UPDATE_ONLYFIRST)
     new_config['XBMC']['xbmc_host'] = XBMC_HOST
     new_config['XBMC']['xbmc_username'] = XBMC_USERNAME
-    new_config['XBMC']['xbmc_password'] = XBMC_PASSWORD
+    new_config['XBMC']['xbmc_password'] = helpers.encrypt(XBMC_PASSWORD, ENCRYPTION_VERSION)
 
     new_config['Plex'] = {}
     new_config['Plex']['use_plex'] = int(USE_PLEX)
@@ -1434,7 +1447,7 @@ def save_config():
     new_config['Plex']['plex_server_host'] = PLEX_SERVER_HOST
     new_config['Plex']['plex_host'] = PLEX_HOST
     new_config['Plex']['plex_username'] = PLEX_USERNAME
-    new_config['Plex']['plex_password'] = PLEX_PASSWORD
+    new_config['Plex']['plex_password'] = helpers.encrypt(PLEX_PASSWORD, ENCRYPTION_VERSION)
 
     new_config['Growl'] = {}
     new_config['Growl']['use_growl'] = int(USE_GROWL)
@@ -1442,7 +1455,7 @@ def save_config():
     new_config['Growl']['growl_notify_ondownload'] = int(GROWL_NOTIFY_ONDOWNLOAD)
     new_config['Growl']['growl_notify_onsubtitledownload'] = int(GROWL_NOTIFY_ONSUBTITLEDOWNLOAD)
     new_config['Growl']['growl_host'] = GROWL_HOST
-    new_config['Growl']['growl_password'] = GROWL_PASSWORD
+    new_config['Growl']['growl_password'] = helpers.encrypt(GROWL_PASSWORD, ENCRYPTION_VERSION)
 
     new_config['Prowl'] = {}
     new_config['Prowl']['use_prowl'] = int(USE_PROWL)
@@ -1458,7 +1471,7 @@ def save_config():
     new_config['Twitter']['twitter_notify_ondownload'] = int(TWITTER_NOTIFY_ONDOWNLOAD)
     new_config['Twitter']['twitter_notify_onsubtitledownload'] = int(TWITTER_NOTIFY_ONSUBTITLEDOWNLOAD)
     new_config['Twitter']['twitter_username'] = TWITTER_USERNAME
-    new_config['Twitter']['twitter_password'] = TWITTER_PASSWORD
+    new_config['Twitter']['twitter_password'] = helpers.encrypt(TWITTER_PASSWORD, ENCRYPTION_VERSION)
     new_config['Twitter']['twitter_prefix'] = TWITTER_PREFIX
 
     new_config['Boxcar'] = {}
@@ -1505,7 +1518,7 @@ def save_config():
     new_config['Trakt'] = {}
     new_config['Trakt']['use_trakt'] = int(USE_TRAKT)
     new_config['Trakt']['trakt_username'] = TRAKT_USERNAME
-    new_config['Trakt']['trakt_password'] = TRAKT_PASSWORD
+    new_config['Trakt']['trakt_password'] = helpers.encrypt(TRAKT_PASSWORD, ENCRYPTION_VERSION)
     new_config['Trakt']['trakt_api'] = TRAKT_API
     new_config['Trakt']['trakt_remove_watchlist'] = int(TRAKT_REMOVE_WATCHLIST)
     new_config['Trakt']['trakt_use_watchlist'] = int(TRAKT_USE_WATCHLIST)
@@ -1546,7 +1559,7 @@ def save_config():
     new_config['Email']['email_port'] = int(EMAIL_PORT)
     new_config['Email']['email_tls'] = int(EMAIL_TLS)
     new_config['Email']['email_user'] = EMAIL_USER
-    new_config['Email']['email_password'] = EMAIL_PASSWORD
+    new_config['Email']['email_password'] = helpers.encrypt(EMAIL_PASSWORD, ENCRYPTION_VERSION)
     new_config['Email']['email_from'] = EMAIL_FROM
     new_config['Email']['email_list'] = EMAIL_LIST
 
@@ -1559,6 +1572,7 @@ def save_config():
     new_config['GUI'] = {}
     new_config['GUI']['gui_name'] = GUI_NAME
     new_config['GUI']['home_layout'] = HOME_LAYOUT
+    new_config['GUI']['history_layout'] = HISTORY_LAYOUT
     new_config['GUI']['display_show_specials'] = int(DISPLAY_SHOW_SPECIALS)
     new_config['GUI']['coming_eps_layout'] = COMING_EPS_LAYOUT
     new_config['GUI']['coming_eps_display_paused'] = int(COMING_EPS_DISPLAY_PAUSED)
@@ -1573,11 +1587,11 @@ def save_config():
     new_config['Subtitles']['subtitles_dir'] = SUBTITLES_DIR
     new_config['Subtitles']['subtitles_default'] = int(SUBTITLES_DEFAULT)
     new_config['Subtitles']['subtitles_history'] = int(SUBTITLES_HISTORY)
+    new_config['Subtitles']['subtitles_finder_frequency'] = int(SUBTITLES_FINDER_FREQUENCY)
 
     new_config['FailedDownloads']= {}
     new_config['FailedDownloads']['use_failed_downloads'] = int(USE_FAILED_DOWNLOADS)
     new_config['FailedDownloads']['delete_failed'] = int(DELETE_FAILED)
-    new_config['FailedDownloads']['treat_empty_as_failed'] = int(TREAT_EMPTY_AS_FAILED)
 
     new_config.write()
 
