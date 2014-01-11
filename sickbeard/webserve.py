@@ -1260,7 +1260,7 @@ class ConfigPostProcessing:
 
         sickbeard.KEEP_PROCESSED_DIR = keep_processed_dir
         sickbeard.PROCESS_METHOD = process_method
-        sickbeard.EXTRA_SCRIPTS = extra_scripts.split('|')
+        sickbeard.EXTRA_SCRIPTS = [x.strip() for x in extra_scripts.split('|') if x.strip()]
         sickbeard.RENAME_EPISODES = rename_episodes
         sickbeard.MOVE_ASSOCIATED_FILES = move_associated_files
         sickbeard.NAMING_CUSTOM_ABD = naming_custom_abd
@@ -3537,7 +3537,7 @@ class Home:
                     epObj.saveToDB()
                 
         if int(status) == WANTED:           
-            msg = "Backlog was automatically started for the following seasons of <b>"+showObj.name+"</b>:<br />"
+            msg = "Backlog was automatically started for the following seasons of <b>" + showObj.name + "</b>:<br /><ul>"
             for cur_segment in segment_list:
                 msg += "<li>Season "+str(cur_segment)+"</li>"
                 logger.log(u"Sending backlog for "+showObj.name+" season "+str(cur_segment)+" because some eps were set to wanted")

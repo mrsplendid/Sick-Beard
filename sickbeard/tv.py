@@ -238,7 +238,8 @@ class TVShow(object):
         if not ek.ek(os.path.isdir, self._location):
             logger.log(str(self.tvdbid) + u": Show dir doesn't exist, skipping NFO generation")
             return False
-
+        
+        logger.log(str(self.tvdbid) + u": Writing NFOs for show")
         for cur_provider in sickbeard.metadata_provider_dict.values():
             result = cur_provider.create_show_metadata(self) or result
 
@@ -809,7 +810,7 @@ class TVShow(object):
         
     def loadNFO(self):
 
-        if not os.path.isdir(self._location):
+        if not ek.ek(os.path.isdir, self._location):
             logger.log(str(self.tvdbid) + u": Show dir doesn't exist, can't load NFO")
             raise exceptions.NoNFOException("The show dir doesn't exist, no NFO could be loaded")
 
@@ -1471,7 +1472,7 @@ class TVEpisode(object):
 
     def loadFromNFO(self, location):
 
-        if not os.path.isdir(self.show._location):
+        if not ek.ek(os.path.isdir, self.show._location):
             logger.log(str(self.show.tvdbid) + u": The show dir is missing, not bothering to try loading the episode NFO")
             return
 
@@ -1980,10 +1981,10 @@ class TVEpisode(object):
             logger.log(str(self.tvdbid) + u": File " + self.location + " is already named correctly, skipping", logger.DEBUG)
             return
 
-        related_files = postProcessor.PostProcessor(self.location)._list_associated_files(self.location)
+        related_files = postProcessor.PostProcessor(self.location).list_associated_files(self.location)
 
         if self.show.subtitles and sickbeard.SUBTITLES_DIR != '':
-            related_subs = postProcessor.PostProcessor(self.location)._list_associated_files(sickbeard.SUBTITLES_DIR, subtitles_only=True)
+            related_subs = postProcessor.PostProcessor(self.location).list_associated_files(sickbeard.SUBTITLES_DIR, subtitles_only=True)
             absolute_proper_subs_path = ek.ek(os.path.join, sickbeard.SUBTITLES_DIR, self.formatted_filename())
             
         logger.log(u"Files associated to " + self.location + ": " + str(related_files), logger.DEBUG)
