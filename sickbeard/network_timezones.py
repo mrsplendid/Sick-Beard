@@ -22,13 +22,15 @@ from sickbeard import db
 from sickbeard import helpers
 from sickbeard import logger
 from sickbeard import encodingKludge as ek
-from os.path import basename, realpath
+from os.path import basename, realpath, join, isfile
 import os
 import re
 import datetime
 
 # regex to parse time (12/24 hour format)
-time_regex = re.compile(r"(\d{1,2}):(\d{2,2})( [PA]M)?\b", flags=re.IGNORECASE)
+time_regex = re.compile(r"(\d{1,2})(([:.](\d{2,2}))? ?([PA][. ]? ?M)|[:.](\d{2,2}))\b", flags=re.IGNORECASE)
+am_regex = re.compile(r"(A[. ]? ?M)", flags=re.IGNORECASE)
+pm_regex = re.compile(r"(P[. ]? ?M)", flags=re.IGNORECASE)
 
 network_dict = None
 
@@ -37,9 +39,29 @@ sb_timezone = tz.tzlocal()
 # helper to remove failed temp download
 def _remove_zoneinfo_failed(filename):
     try:
-        os.remove(filename)
+        ek.ek(os.remove,filename)
     except:
         pass
+
+# helper to remove old unneeded zoneinfo files
+def _remove_old_zoneinfo():
+    if (lib.dateutil.zoneinfo.ZONEINFOFILE is not None):
+        cur_zoneinfo = ek.ek(basename, lib.dateutil.zoneinfo.ZONEINFOFILE)
+    else:
+        return
+    
+    cur_file = ek.ek(realpath, u'lib/dateutil/zoneinfo/' + cur_zoneinfo)
+    
+    for (path, dirs, files) in ek.ek(os.walk,ek.ek(realpath,u'lib/dateutil/zoneinfo/')):
+        for filename in files:
+            if filename.endswith('.tar.gz'):
+                file_w_path = ek.ek(join,path,filename)
+                if file_w_path != cur_file and ek.ek(isfile,file_w_path):
+                    try:
+                        ek.ek(os.remove,file_w_path)
+                        logger.log(u"Delete unneeded old zoneinfo File: " + file_w_path)
+                    except:
+                        logger.log(u"Unable to delete: " + file_w_path,logger.ERROR)
 
 # update the dateutil zoneinfo
 def _update_zoneinfo():
@@ -71,9 +93,9 @@ def _update_zoneinfo():
     zonefile = ek.ek(realpath, u'lib/dateutil/zoneinfo/' + new_zoneinfo)
     zonefile_tmp = re.sub(r"\.tar\.gz$",'.tmp', zonefile)
 
-    if (os.path.exists(zonefile_tmp)):
+    if (ek.ek(os.path.exists,zonefile_tmp)):
         try:
-            os.remove(zonefile_tmp)
+            ek.ek(os.remove,zonefile_tmp)
         except:
             logger.log(u"Unable to delete: " + zonefile_tmp,logger.ERROR)
             return
@@ -89,10 +111,10 @@ def _update_zoneinfo():
             # remove the old zoneinfo file
             if (cur_zoneinfo is not None):
                 old_file = ek.ek(realpath, u'lib/dateutil/zoneinfo/' + cur_zoneinfo)
-                if (os.path.exists(old_file)):
-                    os.remove(old_file)
+                if (ek.ek(os.path.exists,old_file)):
+                    ek.ek(os.remove,old_file)
             # rename downloaded file
-            os.rename(zonefile_tmp,zonefile)
+            ek.ek(os.rename,zonefile_tmp,zonefile)
             # load the new zoneinfo
             reload(lib.dateutil.zoneinfo)
             sb_timezone = tz.tzlocal()
@@ -107,6 +129,7 @@ def _update_zoneinfo():
 # update the network timezone table
 def update_network_dict():
 
+    _remove_old_zoneinfo()
     _update_zoneinfo()
 
     d = {}
@@ -176,7 +199,10 @@ def get_network_timezone(network, network_dict):
         return sb_timezone
 
     try:
-        return tz.gettz(network_dict[network])
+        if lib.dateutil.zoneinfo.ZONEINFOFILE is not None:
+            return tz.gettz(network_dict[network])
+        else:
+            return sb_timezone
     except:
         return sb_timezone
 
@@ -185,20 +211,28 @@ def parse_date_time(d, t, network):
     if network_dict is None:
         load_network_dict()
     mo = time_regex.search(t)
-    if mo is not None and len(mo.groups()) >= 2:
-        try:
-            hr = helpers.tryInt(mo.group(1))
-            m = helpers.tryInt(mo.group(2))
-            ap = mo.group(3)
-            # convert am/pm to 24 hour clock
-            if ap is not None:
-                if ap.lower() == u" pm" and hr != 12:
-                    hr += 12
-                elif ap.lower() == u" am" and hr == 12:
-                    hr -= 12
-        except:
-            hr = 0
-            m = 0
+    if mo is not None and len(mo.groups()) >= 5:
+        if mo.group(5) is not None:
+            try:
+                hr = helpers.tryInt(mo.group(1))
+                m = helpers.tryInt(mo.group(4))
+                ap = mo.group(5)
+                # convert am/pm to 24 hour clock
+                if ap is not None:
+                    if pm_regex.search(ap) is not None and hr != 12:
+                        hr += 12
+                    elif am_regex.search(ap) is not None and hr == 12:
+                        hr -= 12
+            except:
+                hr = 0
+                m = 0
+        else:
+            try:
+                hr = helpers.tryInt(mo.group(1))
+                m = helpers.tryInt(mo.group(6))
+            except:
+                hr = 0
+                m = 0
     else:
         hr = 0
         m = 0

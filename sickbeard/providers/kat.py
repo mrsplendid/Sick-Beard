@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import with_statement
+
 import sys
 import os
 import traceback
@@ -330,15 +332,18 @@ class KATProvider(generic.TorrentProvider):
         magnetFileContent = r.content
 
         try:    
-            fileOut = open(magnetFileName, 'wb')
-            fileOut.write(magnetFileContent)
-            fileOut.close()
+            with open(magnetFileName, 'wb') as fileOut:
+                fileOut.write(magnetFileContent)
+                
             helpers.chmodAsParent(magnetFileName)
-        except IOError, e:
+        
+        except EnvironmentError:
             logger.log("Unable to save the file: " + ex(e), logger.ERROR)
             return False
+        
         logger.log(u"Saved magnet link to " + magnetFileName + " ", logger.MESSAGE)
         return True
+
 
     def findPropers(self, search_date=datetime.datetime.today()):
 
@@ -390,19 +395,25 @@ class KATCache(tvcache.TVCache):
         logger.log(u"Clearing " + self.provider.name + " cache and updating with new information")
         self._clearCache()
 
+        ql = []
         for result in rss_results:
             item = (result[0], result[1])
-            self._parseItem(item)
+            ci = self._parseItem(item)
+            if ci is not None:
+                ql.append(ci)
+
+        myDB = self._getDB()
+        myDB.mass_action(ql)
 
     def _parseItem(self, item):
 
         (title, url) = item
 
         if not title or not url:
-            return
+            return None
 
         logger.log(u"Adding item to cache: " + title, logger.DEBUG)
 
-        self._addCacheEntry(title, url)
+        return self._addCacheEntry(title, url)
     
 provider = KATProvider()

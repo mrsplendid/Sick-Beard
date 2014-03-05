@@ -722,7 +722,7 @@ class TVShow(object):
 
             if not cache:
                 ltvdb_api_parms['cache'] = False
- 
+
             if self.lang:
                 ltvdb_api_parms['language'] = self.lang
 
@@ -737,10 +737,15 @@ class TVShow(object):
             self.name = myEp["seriesname"].strip()
         except AttributeError:
             raise tvdb_exceptions.tvdb_attributenotfound("Found %s, but attribute 'seriesname' was empty." % (self.tvdbid))    
-            
+
         self.genre = myEp['genre']
         self.network = myEp['network']
-        self.runtime = myEp['runtime']
+
+        if myEp['runtime']:
+            self.runtime = myEp['runtime']
+        else:
+            self.runtime = 0
+
         self.imdbid = myEp['imdb_id']
 
         if myEp["airs_dayofweek"] != None and myEp["airs_time"] != None:
@@ -828,56 +833,6 @@ class TVShow(object):
     
             logger.log(str(self.tvdbid) + u": Obtained info from IMDb ->" +  str(self.imdb_info), logger.DEBUG)
         
-    def loadNFO(self):
-
-        if not ek.ek(os.path.isdir, self._location):
-            logger.log(str(self.tvdbid) + u": Show dir doesn't exist, can't load NFO")
-            raise exceptions.NoNFOException("The show dir doesn't exist, no NFO could be loaded")
-
-        logger.log(str(self.tvdbid) + u": Loading show info from NFO")
-
-        xmlFile = ek.ek(os.path.join, self._location, "tvshow.nfo")
-
-        try:
-            xmlFileObj = open(xmlFile, 'r')
-            showXML = etree.ElementTree(file = xmlFileObj)
-
-            if showXML.findtext('title') == None or (showXML.findtext('tvdbid') == None and showXML.findtext('id') == None):
-                raise exceptions.NoNFOException("Invalid info in tvshow.nfo (missing name or id):" \
-                    + str(showXML.findtext('title')) + " " \
-                    + str(showXML.findtext('tvdbid')) + " " \
-                    + str(showXML.findtext('id')))
-
-            self.name = showXML.findtext('title')
-            if showXML.findtext('tvdbid') != None:
-                self.tvdbid = int(showXML.findtext('tvdbid'))
-            elif showXML.findtext('id'):
-                self.tvdbid = int(showXML.findtext('id'))
-            else:
-                raise exceptions.NoNFOException("Empty <id> or <tvdbid> field in NFO")
-
-        except (exceptions.NoNFOException, SyntaxError, ValueError), e:
-            logger.log(u"There was an error parsing your existing tvshow.nfo file: " + ex(e), logger.ERROR)
-            logger.log(u"Attempting to rename it to tvshow.nfo.old", logger.DEBUG)
-
-            try:
-                xmlFileObj.close()
-                ek.ek(os.rename, xmlFile, xmlFile + ".old")
-            except Exception, e:
-                logger.log(u"Failed to rename your tvshow.nfo file - you need to delete it or fix it: " + ex(e), logger.ERROR)
-            raise exceptions.NoNFOException("Invalid info in tvshow.nfo")
-
-        if showXML.findtext('studio') != None:
-            self.network = showXML.findtext('studio')
-        if self.network == None and showXML.findtext('network') != None:
-            self.network = ""
-        if showXML.findtext('genre') != None:
-            self.genre = showXML.findtext('genre')
-        else:
-            self.genre = ""
-
-        # TODO: need to validate the input, I'm assuming it's good until then
-
     def nextEpisode(self):
 
         logger.log(str(self.tvdbid) + ": Finding the episode which airs next", logger.DEBUG)
@@ -1104,7 +1059,7 @@ class TVShow(object):
             return Overview.GOOD
         elif epStatus in Quality.DOWNLOADED + Quality.SNATCHED + Quality.SNATCHED_PROPER + Quality.FAILED:
 
-            anyQualities, bestQualities = Quality.splitQuality(self.quality)  #@UnusedVariable
+            anyQualities, bestQualities = Quality.splitQuality(self.quality)  # @UnusedVariable
             if bestQualities:
                 maxBestQuality = max(bestQualities)
             else:
@@ -1748,7 +1703,7 @@ class TVEpisode(object):
                 return ''
             return parse_result.release_group
 
-        epStatus, epQual = Quality.splitCompositeStatus(self.status)  #@UnusedVariable
+        epStatus, epQual = Quality.splitCompositeStatus(self.status)  # @UnusedVariable
 
         if sickbeard.NAMING_STRIP_YEAR:
             show_name = re.sub("\(\d+\)$", "", self.show.name).rstrip()
@@ -1780,7 +1735,7 @@ class TVEpisode(object):
                    '%D': str(self.airdate.day),
                    '%0M': '%02d' % self.airdate.month,
                    '%0D': '%02d' % self.airdate.day,
-                   '%RT': "PROPER" if self.is_proper else "",
+                   '%RT': 'PROPER' if self.is_proper else None,
                    }
 
     def _format_string(self, pattern, replace_map):
@@ -1792,6 +1747,7 @@ class TVEpisode(object):
 
         # do the replacements
         for cur_replacement in sorted(replace_map.keys(), reverse=True):
+            if replace_map[cur_replacement] is None: continue
             result_name = result_name.replace(cur_replacement, helpers.sanitizeFileName(replace_map[cur_replacement]))
             result_name = result_name.replace(cur_replacement.lower(), helpers.sanitizeFileName(replace_map[cur_replacement].lower()))
 
@@ -1824,7 +1780,10 @@ class TVEpisode(object):
             result_name = result_name.replace('%RG', 'SICKBEARD')
             result_name = result_name.replace('%rg', 'sickbeard')
             logger.log(u"Episode has no release name, replacing it with a generic one: " + result_name, logger.DEBUG)
-        
+
+        if not replace_map['%RT']:
+            result_name = re.sub('([ _.-]*)%RT([ _.-]*)', r'\2', result_name)
+
         # split off ep name part only
         name_groups = re.split(r'[\\/]', result_name)
 
